@@ -1,6 +1,6 @@
 import { Redis } from "@upstash/redis";
 import {
-    clearMp3TempDirIfRoomIsEmpty,
+    clearMp3BlobsIfRoomIsEmpty,
     CLIENT_KEY_PREFIX,
 } from "../mp3-store";
 
@@ -49,7 +49,7 @@ export async function POST(request) {
 
     if (body.action === "leave") {
         await redis.del(clientKey);
-        const cleared = await clearMp3TempDirIfRoomIsEmpty(redis);
+        const cleared = await clearMp3BlobsIfRoomIsEmpty(redis, ROOM_KEY);
 
         if (cleared) {
             const prev = await redis.get(ROOM_KEY);
@@ -59,7 +59,10 @@ export async function POST(request) {
                 videoId: null,
                 audioId: null,
                 audioName: null,
+                audioSize: 0,
                 audioUrl: null,
+                playlist: [],
+                currentTrackIndex: 0,
                 playing: false,
                 time: 0,
                 updatedAt: Date.now(),

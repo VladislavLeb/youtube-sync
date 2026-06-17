@@ -7,6 +7,7 @@ const PAUSED_SYNC_INTERVAL_MS = 3000;
 const MEDIA_YOUTUBE = "youtube";
 const MEDIA_MP3 = "mp3";
 const MP3_SYNC_LEAD_SECONDS = 0.35;
+const MAX_TOTAL_MP3_BYTES = 500 * 1024 * 1024;
 
 function isValidYouTubeId(value) {
   return /^[a-zA-Z0-9_-]{11}$/.test(value || "");
@@ -70,6 +71,15 @@ function waitForAudioMetadata(audio) {
     audio.addEventListener("loadedmetadata", handleReady, { once: true });
     audio.addEventListener("error", handleError, { once: true });
   });
+}
+
+function formatBytes(bytes) {
+  if (!bytes) {
+    return "0 MB";
+  }
+
+  const megabytes = bytes / 1024 / 1024;
+  return `${megabytes.toFixed(megabytes >= 10 ? 0 : 1)} MB`;
 }
 
 export default function Page() {
@@ -207,6 +217,10 @@ export default function Page() {
     }
 
     if (!state.audioId) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      setAudioUrl(null);
       setStatus("No MP3 loaded yet.");
       applyingRemoteRef.current = false;
       return;
@@ -221,7 +235,7 @@ export default function Page() {
     try {
       await waitForAudioMetadata(audio);
     } catch (error) {
-      console.error(error);
+      console.warn(error);
       setStatus("MP3 failed to load. Upload it again.");
       applyingRemoteRef.current = false;
       return;
@@ -512,13 +526,26 @@ export default function Page() {
     setAudioUrl(uploaded.audioUrl);
     currentAudioIdRef.current = uploaded.audioId;
     setMode(MEDIA_MP3);
-    setStatus(`Loaded MP3: ${file.name}`);
+    setStatus(`Added MP3: ${file.name}`);
 
-    await send("load", {
+    await send("appendMp3", {
       mediaType: MEDIA_MP3,
       audioId: uploaded.audioId,
       audioName: uploaded.audioName,
+      audioSize: uploaded.audioSize,
       audioUrl: uploaded.audioUrl,
+    });
+  }
+
+  async function selectPlaylistTrack(index) {
+    await send("selectTrack", {
+      index,
+    });
+  }
+
+  async function removePlaylistTrack(index) {
+    await send("removeTrack", {
+      index,
     });
   }
 
@@ -650,6 +677,12 @@ export default function Page() {
   }
 
   const visibleTime = lastState?.time ? `${Math.round(lastState.time)}s` : "0s";
+  const playlist = Array.isArray(lastState?.playlist) ? lastState.playlist : [];
+  const currentTrackIndex = Number(lastState?.currentTrackIndex || 0);
+  const totalPlaylistBytes = playlist.reduce(
+    (total, track) => total + Number(track.audioSize || 0),
+    0
+  );
   const sharedMedia =
     lastState?.mediaType === MEDIA_MP3
       ? lastState.audioName || "MP3"
@@ -701,8 +734,8 @@ export default function Page() {
         ) : (
           <>
             <p className="subtitle">
-              Choose an MP3 from this device. It will be temporarily uploaded
-              so friends can listen to the same file.
+              Add MP3 files to a shared temporary playlist. Uploads stop at 500
+              MB until songs are removed.
             </p>
 
             <div className="inputRow">
@@ -713,6 +746,51 @@ export default function Page() {
                 onChange={(event) => loadMp3(event.target.files?.[0])}
                 type="file"
               />
+            </div>
+
+            <div className="playlistPanel">
+              <div className="playlistHeader">
+                <strong>Playlist</strong>
+                <span>
+                  {formatBytes(totalPlaylistBytes)} / {formatBytes(MAX_TOTAL_MP3_BYTES)}
+                </span>
+              </div>
+
+              {playlist.length > 0 ? (
+                <div className="playlist">
+                  {playlist.map((track, index) => (
+                    <div
+                      className={
+                        index === currentTrackIndex
+                          ? "playlistItem active"
+                          : "playlistItem"
+                      }
+                      key={track.audioId}
+                    >
+                      <button
+                        className="trackButton"
+                        disabled={uploadingMp3}
+                        onClick={() => selectPlaylistTrack(index)}
+                        type="button"
+                      >
+                        <span>{track.audioName}</span>
+                        <small>{formatBytes(track.audioSize)}</small>
+                      </button>
+
+                      <button
+                        className="removeButton"
+                        disabled={uploadingMp3}
+                        onClick={() => removePlaylistTrack(index)}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="emptyPlaylist">No MP3 files uploaded.</div>
+              )}
             </div>
           </>
         )}
@@ -774,7 +852,7 @@ export default function Page() {
           />
 
           <div className="audioMeta">
-            {audioFile ? audioFile.name : "No local MP3 selected"}
+            {lastState?.audioName || audioFile?.name || "No MP3 selected"}
           </div>
         </div>
 

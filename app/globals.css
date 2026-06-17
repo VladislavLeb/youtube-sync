@@ -154,6 +154,81 @@ h1 {
   width: 100%;
 }
 
+.playlistPanel {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 14px;
+  border: 1px solid #2b2b2b;
+  border-radius: 12px;
+  background: #181818;
+}
+
+.playlistHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #d8d8d8;
+}
+
+.playlistHeader span {
+  color: #a8a8a8;
+}
+
+.playlist {
+  display: grid;
+  gap: 8px;
+}
+
+.playlistItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.trackButton {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid #333;
+  background: #202020;
+  color: #f5f5f5;
+  text-align: left;
+}
+
+.trackButton span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trackButton small {
+  flex: 0 0 auto;
+  color: #a8a8a8;
+}
+
+.playlistItem.active .trackButton {
+  border-color: #ffffff;
+  background: #ffffff;
+  color: #111111;
+}
+
+.playlistItem.active .trackButton small {
+  color: #555555;
+}
+
+.removeButton {
+  background: #2b1515;
+  color: #ffb4b4;
+}
+
+.emptyPlaylist {
+  color: #a8a8a8;
+}
+
 .audioMeta {
   color: #d8d8d8;
   overflow-wrap: anywhere;
@@ -181,5 +256,15 @@ h1 {
   .inputRow button,
   .buttons button {
     width: 100%;
+  }
+
+  .playlistHeader,
+  .playlistItem,
+  .trackButton {
+    align-items: stretch;
+  }
+
+  .playlistItem {
+    grid-template-columns: 1fr;
   }
 }

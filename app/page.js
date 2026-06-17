@@ -111,6 +111,7 @@ export default function Page() {
   const lastVersionRef = useRef(null);
   const lastSoftSyncAtRef = useRef(0);
   const clientIdRef = useRef(null);
+  const selectedModeRef = useRef(MEDIA_YOUTUBE);
 
   function rememberState(state) {
     lastStateRef.current = state;
@@ -288,13 +289,19 @@ export default function Page() {
     rememberState(state);
 
     if (state.mediaType === MEDIA_MP3) {
-      setMode(MEDIA_MP3);
+      if (state.audioId) {
+        selectedModeRef.current = MEDIA_MP3;
+        setMode(MEDIA_MP3);
+      }
       playerRef.current?.pauseVideo?.();
       applyMp3State(state, soft);
       return;
     }
 
-    setMode(MEDIA_YOUTUBE);
+    if (state.videoId) {
+      selectedModeRef.current = MEDIA_YOUTUBE;
+      setMode(MEDIA_YOUTUBE);
+    }
     audioRef.current?.pause();
     applyYouTubeState(state, soft);
   }
@@ -686,6 +693,7 @@ export default function Page() {
   }
 
   function handleModeChange(nextMode) {
+    selectedModeRef.current = nextMode;
     setMode(nextMode);
 
     if (nextMode === MEDIA_MP3) {

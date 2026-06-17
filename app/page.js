@@ -1,5 +1,6 @@
 "use client";
 
+import { upload } from "@vercel/blob/client";
 import { useEffect, useRef, useState } from "react";
 
 const PLAYING_SYNC_INTERVAL_MS = 2000;
@@ -80,6 +81,13 @@ function formatBytes(bytes) {
 
   const megabytes = bytes / 1024 / 1024;
   return `${megabytes.toFixed(megabytes >= 10 ? 0 : 1)} MB`;
+}
+
+function sanitizeFileName(fileName) {
+  return String(fileName || "audio.mp3")
+    .replace(/[/\\?%*:|"<>]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim() || "audio.mp3";
 }
 
 export default function Page() {
@@ -494,46 +502,46 @@ export default function Page() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     setUploadingMp3(true);
     setStatus(`Uploading MP3: ${file.name}`);
 
-    let uploaded;
+    const audioId = crypto.randomUUID();
+    const audioName = sanitizeFileName(file.name);
+    let blob;
 
     try {
-      const res = await fetch("/api/upload-mp3", {
-        method: "POST",
-        body: formData,
+      blob = await upload(`mp3/${audioId}-${audioName}`, file, {
+        access: "public",
+        clientPayload: JSON.stringify({
+          size: file.size,
+        }),
+        contentType: "audio/mpeg",
+        handleUploadUrl: "/api/upload-mp3",
+        multipart: true,
+        onUploadProgress: ({ percentage }) => {
+          setStatus(`Uploading MP3: ${file.name} (${Math.round(percentage)}%)`);
+        },
       });
-
-      uploaded = await res.json();
-
-      if (!res.ok) {
-        alert(uploaded.error || "MP3 upload failed");
-        return;
-      }
     } catch (error) {
       console.error(error);
-      alert("MP3 upload failed");
+      alert(error.message || "MP3 upload failed");
       return;
     } finally {
       setUploadingMp3(false);
     }
 
     setAudioFile(file);
-    setAudioUrl(uploaded.audioUrl);
-    currentAudioIdRef.current = uploaded.audioId;
+    setAudioUrl(blob.url);
+    currentAudioIdRef.current = audioId;
     setMode(MEDIA_MP3);
     setStatus(`Added MP3: ${file.name}`);
 
     await send("appendMp3", {
       mediaType: MEDIA_MP3,
-      audioId: uploaded.audioId,
-      audioName: uploaded.audioName,
-      audioSize: uploaded.audioSize,
-      audioUrl: uploaded.audioUrl,
+      audioId,
+      audioName,
+      audioSize: file.size,
+      audioUrl: blob.url,
     });
   }
 

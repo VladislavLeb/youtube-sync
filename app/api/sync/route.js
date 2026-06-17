@@ -254,6 +254,30 @@ export async function POST(request) {
             updatedAt: Date.now(),
             version: (next.version || 0) + 1,
         });
+    } else if (body.action === "advanceTrack") {
+        const playlist = getPlaylist(next);
+        const currentTrackIndex = Number(next.currentTrackIndex || 0);
+        const nextTrackIndex = currentTrackIndex + 1;
+
+        if (next.mediaType !== MEDIA_MP3 || playlist.length === 0) {
+            return json({ error: "No MP3 playlist loaded" }, 400);
+        }
+
+        if (nextTrackIndex >= playlist.length) {
+            next = stateWithTrack(next, playlist, currentTrackIndex, {
+                playing: false,
+                time: 0,
+                updatedAt: Date.now(),
+                version: (next.version || 0) + 1,
+            });
+        } else {
+            next = stateWithTrack(next, playlist, nextTrackIndex, {
+                playing: true,
+                time: 0,
+                updatedAt: Date.now(),
+                version: (next.version || 0) + 1,
+            });
+        }
     } else if (body.action === "removeTrack") {
         const playlist = getPlaylist(next);
         const index = Number(body.index);

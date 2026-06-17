@@ -581,6 +581,14 @@ export default function Page() {
     });
   }
 
+  async function advancePlaylistTrack() {
+    if (applyingRemoteRef.current || lastStateRef.current?.mediaType !== MEDIA_MP3) {
+      return;
+    }
+
+    await send("advanceTrack");
+  }
+
   function getActiveTime() {
     if (lastStateRef.current?.mediaType === MEDIA_MP3) {
       return audioRef.current?.currentTime || 0;
@@ -864,8 +872,13 @@ export default function Page() {
         <div className={mode === MEDIA_MP3 ? "audioWrap" : "audioWrap hiddenPlayer"}>
           <audio
             controls
+            onEnded={advancePlaylistTrack}
             onPause={() => {
-              if (!applyingRemoteRef.current && lastStateRef.current?.audioUrl) {
+              if (
+                !applyingRemoteRef.current &&
+                !audioRef.current?.ended &&
+                lastStateRef.current?.audioUrl
+              ) {
                 send("pause", {
                   mediaType: MEDIA_MP3,
                   time: audioRef.current?.currentTime || 0,

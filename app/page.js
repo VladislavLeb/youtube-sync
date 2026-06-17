@@ -510,6 +510,23 @@ export default function Page() {
     let blob;
 
     try {
+      const validationRes = await fetch("/api/upload-mp3", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "validate",
+          size: file.size,
+        }),
+      });
+      const validation = await validationRes.json();
+
+      if (!validationRes.ok) {
+        alert(validation.error || "MP3 upload failed");
+        return;
+      }
+
       blob = await upload(`mp3/${audioId}-${audioName}`, file, {
         access: "public",
         clientPayload: JSON.stringify({

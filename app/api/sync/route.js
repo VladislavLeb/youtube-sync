@@ -6,9 +6,15 @@ export const runtime = "nodejs";
 const redis = Redis.fromEnv();
 
 const ROOM_KEY = "youtube-sync:main";
+const MEDIA_YOUTUBE = "youtube";
+const MEDIA_MP3 = "mp3";
 
 const emptyState = {
+    mediaType: MEDIA_YOUTUBE,
     videoId: null,
+    audioId: null,
+    audioName: null,
+    audioUrl: null,
     playing: false,
     time: 0,
     updatedAt: Date.now(),
@@ -30,15 +36,29 @@ function getCurrentSnapshot(state) {
         return emptyState;
     }
 
-    if (!state.playing) {
-        return state;
+    const normalizedState = {
+        ...emptyState,
+        ...state,
+        mediaType: state.mediaType || MEDIA_YOUTUBE,
+    };
+
+    if (!normalizedState.playing) {
+        return normalizedState;
     }
 
     return {
-        ...state,
-        time: state.time + (Date.now() - state.updatedAt) / 1000,
+        ...normalizedState,
+        time: normalizedState.time + (Date.now() - normalizedState.updatedAt) / 1000,
         updatedAt: Date.now(),
     };
+}
+
+function hasLoadedMedia(state) {
+    return state.mediaType === MEDIA_MP3 ? Boolean(state.audioId) : Boolean(state.videoId);
+}
+
+function normalizeMediaType(value) {
+    return value === MEDIA_MP3 ? MEDIA_MP3 : MEDIA_YOUTUBE;
 }
 
 function json(data, status = 200) {
@@ -67,21 +87,45 @@ export async function POST(request) {
     const prev = await redis.get(ROOM_KEY);
     let next = prev || emptyState;
 
-    if (body.action === "load") {
+    if (body.action === "load" && normalizeMediaType(body.mediaType) === MEDIA_YOUTUBE) {
         if (!/^[a-zA-Z0-9_-]{11}$/.test(body.videoId || "")) {
             return json({ error: "Invalid YouTube video ID" }, 400);
         }
 
         next = {
+            mediaType: MEDIA_YOUTUBE,
             videoId: body.videoId,
+            audioId: null,
+            audioName: null,
+            audioUrl: null,
+            playing: false,
+            time: 0,
+            updatedAt: Date.now(),
+            version: (prev?.version || 0) + 1,
+        };
+    } else if (body.action === "load" && normalizeMediaType(body.mediaType) === MEDIA_MP3) {
+        const audioId = String(body.audioId || "").trim();
+        const audioName = String(body.audioName || "").trim();
+        const audioUrl = String(body.audioUrl || "").trim();
+
+        if (!audioId || !audioName || !audioUrl) {
+            return json({ error: "Invalid MP3 metadata" }, 400);
+        }
+
+        next = {
+            mediaType: MEDIA_MP3,
+            videoId: null,
+            audioId,
+            audioName,
+            audioUrl,
             playing: false,
             time: 0,
             updatedAt: Date.now(),
             version: (prev?.version || 0) + 1,
         };
     } else if (body.action === "play") {
-        if (!next.videoId) {
-            return json({ error: "No video loaded" }, 400);
+        if (!hasLoadedMedia(next)) {
+            return json({ error: "No media loaded" }, 400);
         }
 
         next = {
@@ -92,8 +136,8 @@ export async function POST(request) {
             version: (next.version || 0) + 1,
         };
     } else if (body.action === "pause") {
-        if (!next.videoId) {
-            return json({ error: "No video loaded" }, 400);
+        if (!hasLoadedMedia(next)) {
+            return json({ error: "No media loaded" }, 400);
         }
 
         next = {
@@ -104,8 +148,8 @@ export async function POST(request) {
             version: (next.version || 0) + 1,
         };
     } else if (body.action === "seek") {
-        if (!next.videoId) {
-            return json({ error: "No video loaded" }, 400);
+        if (!hasLoadedMedia(next)) {
+            return json({ error: "No media loaded" }, 400);
         }
 
         next = {

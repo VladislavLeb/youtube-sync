@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
-import { handleUpload } from "@vercel/blob/client";
+import { issueSignedToken } from "@vercel/blob";
+import { handleUploadPresigned } from "@vercel/blob/client";
 import {
     getPlaylistBytes,
     MAX_MP3_BYTES,
@@ -82,21 +83,28 @@ export async function POST(request) {
     }
 
     try {
-        const response = await handleUpload({
+        const response = await handleUploadPresigned({
             body,
             request,
-            onBeforeGenerateToken: async (pathname, clientPayload) => {
+            getSignedToken: async (pathname, clientPayload) => {
                 const payload = parseClientPayload(clientPayload);
                 const fileSize = Number(payload.size || 0);
                 const { maximumSizeInBytes } = await validateUpload(fileSize, pathname);
+                const validUntil = Date.now() + 60 * 60 * 1000;
 
                 return {
-                    addRandomSuffix: false,
-                    allowedContentTypes: ["audio/mpeg"],
-                    maximumSizeInBytes,
-                    tokenPayload: JSON.stringify({
-                        size: fileSize,
+                    token: await issueSignedToken({
+                        allowedContentTypes: ["audio/mpeg"],
+                        maximumSizeInBytes,
+                        operations: ["put"],
+                        pathname,
+                        validUntil,
                     }),
+                    urlOptions: {
+                        allowedContentTypes: ["audio/mpeg"],
+                        maximumSizeInBytes,
+                        validUntil,
+                    },
                 };
             },
         });

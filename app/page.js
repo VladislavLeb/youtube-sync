@@ -1,6 +1,6 @@
 "use client";
 
-import { upload } from "@vercel/blob/client";
+import { uploadPresigned } from "@vercel/blob/client";
 import { useEffect, useRef, useState } from "react";
 
 const PLAYING_SYNC_INTERVAL_MS = 2000;
@@ -534,7 +534,7 @@ export default function Page() {
         return;
       }
 
-      blob = await upload(`mp3/${audioId}-${audioName}`, file, {
+      blob = await uploadPresigned(`mp3/${audioId}-${audioName}`, file, {
         access: "public",
         clientPayload: JSON.stringify({
           size: file.size,

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const redis = Redis.fromEnv();
-const CLIENT_TTL_SECONDS = 90;
+const CLIENT_TTL_SECONDS = 35;
 const ROOM_KEY = "youtube-sync:main";
 
 function json(data, status = 200) {

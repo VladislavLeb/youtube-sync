@@ -1,6 +1,5 @@
 import { Redis } from "@upstash/redis";
 import { deleteMp3Blob } from "../mp3-store";
-import { publishSyncState } from "../sync-events";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -342,7 +341,6 @@ export async function POST(request) {
     }
 
     await redis.set(ROOM_KEY, next);
-    publishSyncState(next);
 
     return json(next);
 }

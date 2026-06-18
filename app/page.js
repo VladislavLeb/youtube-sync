@@ -3,7 +3,8 @@
 import { uploadPresigned } from "@vercel/blob/client";
 import { useEffect, useRef, useState } from "react";
 
-const SOFT_SYNC_INTERVAL_MS = 30000;
+const PLAYING_SYNC_INTERVAL_MS = 2000;
+const PAUSED_SYNC_INTERVAL_MS = 3000;
 const MEDIA_YOUTUBE = "youtube";
 const MEDIA_MP3 = "mp3";
 const MP3_SYNC_LEAD_SECONDS = 0.35;
@@ -89,14 +90,6 @@ function sanitizeFileName(fileName) {
     .trim() || "audio.mp3";
 }
 
-function getSyncedTime(state) {
-  if (!state?.playing) {
-    return state?.time || 0;
-  }
-
-  return (state.time || 0) + (Date.now() - state.updatedAt) / 1000;
-}
-
 export default function Page() {
   const [mode, setMode] = useState(MEDIA_YOUTUBE);
   const [url, setUrl] = useState("");
@@ -171,7 +164,7 @@ export default function Page() {
       return;
     }
 
-    const targetTime = state.playing ? getSyncedTime(state) + 0.35 : state.time;
+    const targetTime = state.playing ? state.time + 0.35 : state.time;
 
     if (currentVideoIdRef.current !== state.videoId) {
       currentVideoIdRef.current = state.videoId;
@@ -259,7 +252,7 @@ export default function Page() {
 
     const loadingDelay = state.playing ? (Date.now() - startedApplyingAt) / 1000 : 0;
     const targetTime = state.playing
-      ? getSyncedTime(state) + MP3_SYNC_LEAD_SECONDS + loadingDelay
+      ? state.time + MP3_SYNC_LEAD_SECONDS + loadingDelay
       : state.time;
     const duration = Number.isFinite(audio.duration) ? audio.duration : targetTime;
     const safeTargetTime = Math.min(targetTime, duration);
@@ -423,7 +416,7 @@ export default function Page() {
     postPresence("heartbeat");
     const intervalId = window.setInterval(() => {
       postPresence("heartbeat");
-    }, 30000);
+    }, 10000);
 
     window.addEventListener("pagehide", sendLeave);
 
@@ -435,42 +428,60 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    const events = new EventSource("/api/sync/events");
+    let cancelled = false;
+    let timeoutId = null;
 
-    events.addEventListener("sync", (event) => {
-      const state = JSON.parse(event.data);
+    function scheduleNextPoll(state) {
+      if (cancelled) return;
 
-      rememberState(state);
+      const delay = state?.playing
+        ? PLAYING_SYNC_INTERVAL_MS
+        : PAUSED_SYNC_INTERVAL_MS;
 
-      if (state.version !== lastVersionRef.current) {
-        lastVersionRef.current = state.version;
-        applyState(state, false);
+      timeoutId = window.setTimeout(poll, delay);
+    }
+
+    async function poll() {
+      let stateForNextPoll = lastStateRef.current;
+
+      try {
+        const res = await fetch("/api/sync", {
+          cache: "no-store",
+        });
+
+        const state = await res.json();
+
+        if (cancelled) return;
+
+        stateForNextPoll = state;
+        rememberState(state);
+
+        if (state.version !== lastVersionRef.current) {
+          lastVersionRef.current = state.version;
+          applyState(state, false);
+          return;
+        }
+
+        const now = Date.now();
+
+        if (state.playing && now - lastSoftSyncAtRef.current > 10000) {
+          lastSoftSyncAtRef.current = now;
+          applyState(state, true);
+        }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        scheduleNextPoll(stateForNextPoll);
       }
-    });
+    }
 
-    events.onerror = (error) => {
-      console.error(error);
-    };
+    poll();
 
     return () => {
-      events.close();
-    };
-  }, []);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      const state = lastStateRef.current;
-
-      if (!state?.playing) {
-        return;
+      cancelled = true;
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
       }
-
-      lastSoftSyncAtRef.current = Date.now();
-      applyState(state, true);
-    }, SOFT_SYNC_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(intervalId);
     };
   }, []);
 

@@ -1,0 +1,3 @@
+livekit
+numpy
+sounddevice

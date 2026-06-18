@@ -126,6 +126,19 @@ h1 {
   color: #d8d8d8;
 }
 
+.livePanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid #2b2b2b;
+  border-radius: 12px;
+  background: #181818;
+  color: #d8d8d8;
+}
+
 .playerWrap {
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -254,8 +267,14 @@ h1 {
   }
 
   .inputRow button,
-  .buttons button {
+  .buttons button,
+  .livePanel button {
     width: 100%;
+  }
+
+  .livePanel {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .playlistHeader,

@@ -1,12 +1,14 @@
 "use client";
 
 import { uploadPresigned } from "@vercel/blob/client";
+import { Room, RoomEvent, Track } from "livekit-client";
 import { useEffect, useRef, useState } from "react";
 
 const PLAYING_SYNC_INTERVAL_MS = 2000;
 const PAUSED_SYNC_INTERVAL_MS = 3000;
 const MEDIA_YOUTUBE = "youtube";
 const MEDIA_MP3 = "mp3";
+const MEDIA_LIVE = "live";
 const MP3_SYNC_LEAD_SECONDS = 0.35;
 const MAX_TOTAL_MP3_BYTES = 500 * 1024 * 1024;
 
@@ -98,10 +100,14 @@ export default function Page() {
   const [lastState, setLastState] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
   const [audioUrl, setAudioUrl] = useState(null);
+  const [liveStatus, setLiveStatus] = useState("Live DJ disconnected.");
+  const [liveConnected, setLiveConnected] = useState(false);
   const [uploadingMp3, setUploadingMp3] = useState(false);
 
   const playerRef = useRef(null);
   const audioRef = useRef(null);
+  const liveAudioContainerRef = useRef(null);
+  const liveRoomRef = useRef(null);
   const playerReadyRef = useRef(false);
   const currentVideoIdRef = useRef(null);
   const currentAudioIdRef = useRef(null);
@@ -287,6 +293,11 @@ export default function Page() {
   function applyState(state, soft = false) {
     applyingRemoteRef.current = true;
     rememberState(state);
+
+    if (selectedModeRef.current === MEDIA_LIVE) {
+      applyingRemoteRef.current = false;
+      return;
+    }
 
     if (state.mediaType === MEDIA_MP3) {
       if (state.audioId) {
@@ -485,6 +496,12 @@ export default function Page() {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      liveRoomRef.current?.disconnect();
+    };
+  }, []);
+
   async function loadVideo() {
     const videoId = extractYouTubeId(url);
 
@@ -579,6 +596,85 @@ export default function Page() {
     await send("removeTrack", {
       index,
     });
+  }
+
+  function attachLiveAudioTrack(track) {
+    const container = liveAudioContainerRef.current;
+
+    if (!container || track.kind !== Track.Kind.Audio) {
+      return;
+    }
+
+    const element = track.attach();
+    element.autoplay = true;
+    element.controls = false;
+    element.dataset.livekitAudio = "true";
+    container.appendChild(element);
+  }
+
+  function detachLiveAudioTrack(track) {
+    track.detach().forEach((element) => {
+      element.remove();
+    });
+  }
+
+  async function connectLiveDj() {
+    try {
+      setLiveStatus("Connecting to Live DJ...");
+
+      const res = await fetch("/api/livekit-token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          identity: `listener-${crypto.randomUUID()}`,
+          role: "listener",
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "Could not get LiveKit token");
+        setLiveStatus("Live DJ disconnected.");
+        return;
+      }
+
+      const room = new Room();
+      liveRoomRef.current = room;
+
+      room.on(RoomEvent.TrackSubscribed, attachLiveAudioTrack);
+      room.on(RoomEvent.TrackUnsubscribed, detachLiveAudioTrack);
+      room.on(RoomEvent.Disconnected, () => {
+        setLiveConnected(false);
+        setLiveStatus("Live DJ disconnected.");
+      });
+
+      await room.connect(data.livekitUrl, data.token);
+
+      room.remoteParticipants.forEach((participant) => {
+        participant.trackPublications.forEach((publication) => {
+          if (publication.track) {
+            attachLiveAudioTrack(publication.track);
+          }
+        });
+      });
+
+      setLiveConnected(true);
+      setLiveStatus("Listening to Live DJ.");
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Could not connect to Live DJ");
+      setLiveStatus("Live DJ disconnected.");
+    }
+  }
+
+  function disconnectLiveDj() {
+    liveRoomRef.current?.disconnect();
+    liveRoomRef.current = null;
+    liveAudioContainerRef.current?.replaceChildren();
+    setLiveConnected(false);
+    setLiveStatus("Live DJ disconnected.");
   }
 
   async function advancePlaylistTrack() {
@@ -705,13 +801,19 @@ export default function Page() {
     setMode(nextMode);
 
     if (nextMode === MEDIA_MP3) {
+      disconnectLiveDj();
       playerRef.current?.pauseVideo?.();
       setStatus(
         audioFile
           ? `Loaded MP3: ${audioFile.name}`
           : "Choose an MP3 file to upload for everyone."
       );
+    } else if (nextMode === MEDIA_LIVE) {
+      playerRef.current?.pauseVideo?.();
+      audioRef.current?.pause();
+      setStatus("Live DJ mode.");
     } else {
+      disconnectLiveDj();
       audioRef.current?.pause();
       setStatus(ready ? "Ready. Paste a YouTube link." : "Loading YouTube player...");
     }
@@ -750,6 +852,14 @@ export default function Page() {
           >
             MP3
           </button>
+
+          <button
+            className={mode === MEDIA_LIVE ? "active" : ""}
+            onClick={() => handleModeChange(MEDIA_LIVE)}
+            type="button"
+          >
+            Live DJ
+          </button>
         </nav>
 
         {mode === MEDIA_YOUTUBE ? (
@@ -772,7 +882,7 @@ export default function Page() {
               </button>
             </div>
           </>
-        ) : (
+        ) : mode === MEDIA_MP3 ? (
           <>
             <p className="subtitle">
               Add MP3 files to a shared temporary playlist. Uploads stop at 500
@@ -834,36 +944,61 @@ export default function Page() {
               )}
             </div>
           </>
+        ) : (
+          <>
+            <p className="subtitle">
+              Listen to the DJ stream published from the local Python sender.
+            </p>
+
+            <div className="livePanel">
+              <div>
+                <strong>Live DJ:</strong> {liveStatus}
+              </div>
+
+              <button
+                onClick={liveConnected ? disconnectLiveDj : connectLiveDj}
+                type="button"
+              >
+                {liveConnected ? "Disconnect Live DJ" : "Listen Live DJ"}
+              </button>
+
+              <div ref={liveAudioContainerRef} />
+            </div>
+          </>
         )}
 
-        <div className="buttons">
-          <button onClick={playForEveryone} disabled={uploadingMp3 || (mode === MEDIA_YOUTUBE && !ready)}>
-            Play for everyone
-          </button>
+        {mode !== MEDIA_LIVE && (
+          <div className="buttons">
+            <button onClick={playForEveryone} disabled={uploadingMp3 || (mode === MEDIA_YOUTUBE && !ready)}>
+              Play for everyone
+            </button>
 
-          <button onClick={pauseForEveryone} disabled={uploadingMp3 || (mode === MEDIA_YOUTUBE && !ready)}>
-            Pause for everyone
-          </button>
+            <button onClick={pauseForEveryone} disabled={uploadingMp3 || (mode === MEDIA_YOUTUBE && !ready)}>
+              Pause for everyone
+            </button>
 
-          <button onClick={syncCurrentTime} disabled={uploadingMp3 || (mode === MEDIA_YOUTUBE && !ready)}>
-            Sync current time
-          </button>
+            <button onClick={syncCurrentTime} disabled={uploadingMp3 || (mode === MEDIA_YOUTUBE && !ready)}>
+              Sync current time
+            </button>
 
-          <button onClick={unlockAutoplay} disabled={uploadingMp3 || (mode === MEDIA_YOUTUBE && !ready)}>
-            Unlock autoplay
-          </button>
-        </div>
-
-        <div className="info">
-          <div>
-            <strong>Status:</strong> {status}
+            <button onClick={unlockAutoplay} disabled={uploadingMp3 || (mode === MEDIA_YOUTUBE && !ready)}>
+              Unlock autoplay
+            </button>
           </div>
+        )}
 
-          <div>
-            <strong>Shared state:</strong> {sharedMedia} /{" "}
-            {lastState?.playing ? "playing" : "paused"} / {visibleTime}
+        {mode !== MEDIA_LIVE && (
+          <div className="info">
+            <div>
+              <strong>Status:</strong> {status}
+            </div>
+
+            <div>
+              <strong>Shared state:</strong> {sharedMedia} /{" "}
+              {lastState?.playing ? "playing" : "paused"} / {visibleTime}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className={mode === MEDIA_YOUTUBE ? "playerWrap" : "playerWrap hiddenPlayer"}>
           <div id="player" />
@@ -902,11 +1037,13 @@ export default function Page() {
           </div>
         </div>
 
-        <p className="hint">
-          Each friend should click “Unlock autoplay” once after loading the page.
-          Browsers may block autoplay with sound until the user interacts with
-          the page.
-        </p>
+        {mode !== MEDIA_LIVE && (
+          <p className="hint">
+            Each friend should click “Unlock autoplay” once after loading the page.
+            Browsers may block autoplay with sound until the user interacts with
+            the page.
+          </p>
+        )}
       </section>
     </main>
   );

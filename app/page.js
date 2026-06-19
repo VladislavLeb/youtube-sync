@@ -800,6 +800,10 @@ export default function Page() {
 
     const mediaType = lastStateRef.current?.mediaType || mode;
 
+    if (mediaType === MEDIA_MP3) {
+      audioRef.current?.pause();
+    }
+
     await send("pause", {
       mediaType,
       time: getActiveTime(),

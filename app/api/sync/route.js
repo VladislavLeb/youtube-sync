@@ -258,9 +258,34 @@ export async function POST(request) {
         const playlist = getPlaylist(next);
         const currentTrackIndex = Number(next.currentTrackIndex || 0);
         const nextTrackIndex = currentTrackIndex + 1;
+        const expectedVersion = Number(body.version);
+        const expectedTrackIndex = Number(body.currentTrackIndex);
+        const expectedAudioId = String(body.audioId || "");
 
         if (next.mediaType !== MEDIA_MP3 || playlist.length === 0) {
             return json({ error: "No MP3 playlist loaded" }, 400);
+        }
+
+        if (
+            Number.isFinite(expectedVersion) &&
+            Number.isFinite(next.version) &&
+            expectedVersion !== next.version
+        ) {
+            return json(next);
+        }
+
+        if (
+            expectedAudioId &&
+            expectedAudioId !== next.audioId
+        ) {
+            return json(next);
+        }
+
+        if (
+            Number.isInteger(expectedTrackIndex) &&
+            expectedTrackIndex !== currentTrackIndex
+        ) {
+            return json(next);
         }
 
         if (nextTrackIndex >= playlist.length) {

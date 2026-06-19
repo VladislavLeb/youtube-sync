@@ -40,7 +40,7 @@ async function validateUpload(fileSize, pathname = "mp3/audio.mp3") {
     }
 
     if (fileSize > MAX_MP3_BYTES) {
-        throw new Error("MP3 file is too large. Max size is 50 MB.");
+        throw new Error("MP3 file is too large. Max size is 200 MB.");
     }
 
     const state = await redis.get(ROOM_KEY);

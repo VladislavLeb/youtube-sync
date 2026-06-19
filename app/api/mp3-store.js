@@ -1,6 +1,6 @@
 import { del } from "@vercel/blob";
 
-export const MAX_MP3_BYTES = 50 * 1024 * 1024;
+export const MAX_MP3_BYTES = 200 * 1024 * 1024;
 export const MAX_TOTAL_MP3_BYTES = 500 * 1024 * 1024;
 export const CLIENT_KEY_PREFIX = "youtube-sync:clients:";
 

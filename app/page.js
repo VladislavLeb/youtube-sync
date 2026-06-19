@@ -102,6 +102,7 @@ export default function Page() {
   const [audioUrl, setAudioUrl] = useState(null);
   const [liveStatus, setLiveStatus] = useState("Live DJ disconnected.");
   const [liveConnected, setLiveConnected] = useState(false);
+  const [liveVolume, setLiveVolume] = useState(80);
   const [uploadingMp3, setUploadingMp3] = useState(false);
 
   const playerRef = useRef(null);
@@ -116,6 +117,7 @@ export default function Page() {
   const lastStateRef = useRef(null);
   const lastVersionRef = useRef(null);
   const lastSoftSyncAtRef = useRef(0);
+  const lastAdvanceAudioIdRef = useRef(null);
   const clientIdRef = useRef(null);
   const selectedModeRef = useRef(MEDIA_YOUTUBE);
 
@@ -124,7 +126,14 @@ export default function Page() {
     setLastState(state);
   }
 
-  async function send(action, payload = {}) {
+  function shouldIgnoreIncomingState(state) {
+    return (
+      selectedModeRef.current === MEDIA_MP3 &&
+      state?.mediaType !== MEDIA_MP3
+    ) || selectedModeRef.current === MEDIA_LIVE;
+  }
+
+  async function send(action, payload = {}, options = {}) {
     try {
       const res = await fetch("/api/sync", {
         method: "POST",
@@ -146,7 +155,10 @@ export default function Page() {
 
       lastVersionRef.current = data.version;
       rememberState(data);
-      applyState(data, false);
+
+      if (options.applyLocal !== false) {
+        applyState(data, false);
+      }
 
       return data;
     } catch (error) {
@@ -265,6 +277,7 @@ export default function Page() {
     const diff = Math.abs(audio.currentTime - safeTargetTime);
 
     currentAudioIdRef.current = state.audioId;
+    lastAdvanceAudioIdRef.current = null;
 
     if (!soft || diff > 1.25) {
       audio.currentTime = safeTargetTime;
@@ -292,12 +305,13 @@ export default function Page() {
 
   function applyState(state, soft = false) {
     applyingRemoteRef.current = true;
-    rememberState(state);
 
-    if (selectedModeRef.current === MEDIA_LIVE) {
+    if (shouldIgnoreIncomingState(state)) {
       applyingRemoteRef.current = false;
       return;
     }
+
+    rememberState(state);
 
     if (state.mediaType === MEDIA_MP3) {
       if (state.audioId) {
@@ -475,12 +489,15 @@ export default function Page() {
         if (cancelled) return;
 
         stateForNextPoll = state;
-        rememberState(state);
 
         if (state.version !== lastVersionRef.current) {
           lastVersionRef.current = state.version;
           applyState(state, false);
           return;
+        }
+
+        if (!shouldIgnoreIncomingState(state)) {
+          rememberState(state);
         }
 
         const now = Date.now();
@@ -584,6 +601,7 @@ export default function Page() {
     setAudioFile(file);
     setAudioUrl(blob.url);
     currentAudioIdRef.current = audioId;
+    selectedModeRef.current = MEDIA_MP3;
     setMode(MEDIA_MP3);
     setStatus(`Added MP3: ${file.name}`);
 
@@ -597,6 +615,8 @@ export default function Page() {
   }
 
   async function selectPlaylistTrack(index) {
+    lastAdvanceAudioIdRef.current = null;
+
     await send("selectTrack", {
       index,
     });
@@ -618,8 +638,26 @@ export default function Page() {
     const element = track.attach();
     element.autoplay = true;
     element.controls = false;
+    element.volume = liveVolume / 100;
     element.dataset.livekitAudio = "true";
     container.appendChild(element);
+  }
+
+  function changeLiveVolume(value) {
+    const nextVolume = Number(value);
+
+    if (!Number.isFinite(nextVolume)) {
+      return;
+    }
+
+    const clampedVolume = Math.min(Math.max(nextVolume, 0), 100);
+    setLiveVolume(clampedVolume);
+
+    liveAudioContainerRef.current
+      ?.querySelectorAll("audio")
+      .forEach((element) => {
+        element.volume = clampedVolume / 100;
+      });
   }
 
   function detachLiveAudioTrack(track) {
@@ -688,11 +726,23 @@ export default function Page() {
   }
 
   async function advancePlaylistTrack() {
-    if (applyingRemoteRef.current || lastStateRef.current?.mediaType !== MEDIA_MP3) {
+    const state = lastStateRef.current;
+
+    if (applyingRemoteRef.current || state?.mediaType !== MEDIA_MP3 || !state.audioId) {
       return;
     }
 
-    await send("advanceTrack");
+    if (lastAdvanceAudioIdRef.current === state.audioId) {
+      return;
+    }
+
+    lastAdvanceAudioIdRef.current = state.audioId;
+
+    await send("advanceTrack", {
+      audioId: state.audioId,
+      currentTrackIndex: state.currentTrackIndex,
+      version: state.version,
+    });
   }
 
   function getActiveTime() {
@@ -717,9 +767,28 @@ export default function Page() {
       return;
     }
 
+    const mediaType = lastStateRef.current?.mediaType || mode;
+    const time = getActiveTime();
+
+    if (mediaType === MEDIA_MP3) {
+      const audio = audioRef.current;
+
+      if (audio) {
+        const playPromise = audio.play();
+
+        if (playPromise) {
+          playPromise.catch(() => {
+            setStatus("Autoplay blocked. Press the MP3 play button once.");
+          });
+        }
+      }
+    }
+
     await send("play", {
-      mediaType: lastStateRef.current?.mediaType || mode,
-      time: getActiveTime(),
+      mediaType,
+      time,
+    }, {
+      applyLocal: mediaType !== MEDIA_MP3,
     });
   }
 
@@ -729,9 +798,13 @@ export default function Page() {
       return;
     }
 
+    const mediaType = lastStateRef.current?.mediaType || mode;
+
     await send("pause", {
-      mediaType: lastStateRef.current?.mediaType || mode,
+      mediaType,
       time: getActiveTime(),
+    }, {
+      applyLocal: mediaType !== MEDIA_MP3,
     });
   }
 
@@ -741,9 +814,32 @@ export default function Page() {
       return;
     }
 
+    const mediaType = lastStateRef.current?.mediaType || mode;
+
     await send("seek", {
-      mediaType: lastStateRef.current?.mediaType || mode,
+      mediaType,
       time: getActiveTime(),
+    }, {
+      applyLocal: mediaType !== MEDIA_MP3,
+    });
+  }
+
+  function syncMp3Seek() {
+    if (applyingRemoteRef.current || lastStateRef.current?.mediaType !== MEDIA_MP3) {
+      return;
+    }
+
+    const audio = audioRef.current;
+
+    if (!audio || !lastStateRef.current?.audioUrl) {
+      return;
+    }
+
+    send("seek", {
+      mediaType: MEDIA_MP3,
+      time: audio.currentTime || 0,
+    }, {
+      applyLocal: false,
     });
   }
 
@@ -965,6 +1061,18 @@ export default function Page() {
                 <strong>Live DJ:</strong> {liveStatus}
               </div>
 
+              <label className="volumeControl">
+                <span>Volume</span>
+                <input
+                  max="100"
+                  min="0"
+                  onChange={(event) => changeLiveVolume(event.target.value)}
+                  type="range"
+                  value={liveVolume}
+                />
+                <span>{liveVolume}%</span>
+              </label>
+
               <button
                 onClick={liveConnected ? disconnectLiveDj : connectLiveDj}
                 type="button"
@@ -1027,6 +1135,8 @@ export default function Page() {
                 send("pause", {
                   mediaType: MEDIA_MP3,
                   time: audioRef.current?.currentTime || 0,
+                }, {
+                  applyLocal: false,
                 });
               }
             }}
@@ -1035,9 +1145,12 @@ export default function Page() {
                 send("play", {
                   mediaType: MEDIA_MP3,
                   time: audioRef.current?.currentTime || 0,
+                }, {
+                  applyLocal: false,
                 });
               }
             }}
+            onSeeked={syncMp3Seek}
             ref={audioRef}
             src={audioUrl || undefined}
           />

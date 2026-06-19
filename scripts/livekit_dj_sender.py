@@ -98,8 +98,11 @@ async def publish_audio(
     def handle_signal() -> None:
         stop_event.set()
 
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, handle_signal)
+    try:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, handle_signal)
+    except NotImplementedError:
+        pass
 
     def audio_callback(indata, frames, time_info, status) -> None:
         if status:
@@ -156,7 +159,10 @@ def main() -> None:
         print_input_devices()
         return
 
-    asyncio.run(publish_audio(args.app_url, args.identity, args.device, args.channels))
+    try:
+        asyncio.run(publish_audio(args.app_url, args.identity, args.device, args.channels))
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":

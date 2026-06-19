@@ -392,6 +392,11 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
+    if (mode === MEDIA_LIVE) {
+      clientIdRef.current = null;
+      return undefined;
+    }
+
     const clientId = crypto.randomUUID();
     clientIdRef.current = clientId;
 
@@ -435,10 +440,15 @@ export default function Page() {
       window.clearInterval(intervalId);
       window.removeEventListener("pagehide", sendLeave);
       postPresence("leave");
+      clientIdRef.current = null;
     };
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
+    if (mode === MEDIA_LIVE) {
+      return undefined;
+    }
+
     let cancelled = false;
     let timeoutId = null;
 
@@ -494,7 +504,7 @@ export default function Page() {
         window.clearTimeout(timeoutId);
       }
     };
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     return () => {

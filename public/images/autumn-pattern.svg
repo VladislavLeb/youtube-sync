@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="224" viewBox="0 0 260 224" fill="none">
+  <g stroke="#a66d3d" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" opacity=".28">
+    <!-- Maple leaves -->
+    <path d="M48 37l5-9 3 7 8-4-3 8 8 3-8 4 4 8-9-3-4 8-3-9-8 3 4-8-7-4 8-2-2-8 6 6z"/>
+    <path d="M53 40l-4 13m4-7 7-5m-7 5-7-3" stroke-width="1"/>
+    <path d="M199 143l4-7 3 6 6-3-2 6 6 3-6 3 3 6-7-2-3 6-2-7-7 2 3-6-5-3 6-2-1-6 5 4z"/>
+    <path d="M202 146l-3 10m3-6 5-4m-5 4-5-2" stroke-width="1"/>
+    <!-- Small rounded autumn tree -->
+    <path d="M126 90c-1-12 7-20 17-18 3-11 18-13 24-4 12-2 19 9 15 19 9 8 3 21-7 23h-37c-12-1-18-12-12-20z"/>
+    <path d="M154 111v28m0-17-9-9m9 13 9-11m-9 17-8-7m8 3 8-6"/>
+    <path d="M143 140h23" stroke-width="1"/>
+    <!-- Acorn and drifting leaves -->
+    <path d="M92 164c0-8 5-13 11-13s11 5 11 13c0 7-5 12-11 12s-11-5-11-12z"/>
+    <path d="M91 160c3-5 17-5 24 0m-12-9v-4m-4 4 4-4 4 4m-6 18 5-7" stroke-width="1"/>
+    <path d="M27 119c4-7 12-8 18-4-2 8-9 12-18 4zm2 0 11-3" stroke-width="1.2"/>
+    <path d="M224 44c4-7 12-8 18-4-2 8-9 12-18 4zm2 0 11-3" stroke-width="1.2"/>
+    <path d="M116 28c3-5 9-6 13-3-2 6-7 9-13 3zm2 0 8-2" stroke-width="1.1"/>
+  </g>
+</svg>

@@ -3,7 +3,7 @@
 }
 
 :root {
-  --page-bg: #f4f7fb;
+  --page-bg: #f7f5f1;
   --surface: #ffffff;
   --surface-muted: #f8fafc;
   --surface-raised: #ffffff;
@@ -24,11 +24,21 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.10), transparent 32rem),
-    linear-gradient(180deg, #fbfdff 0%, var(--page-bg) 100%);
+  background: linear-gradient(180deg, #fbfaf8 0%, var(--page-bg) 100%);
   color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+body::before {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  background-image: url("/images/autumn-pattern.svg");
+  background-repeat: repeat;
+  background-size: 260px 224px;
+  content: "";
+  opacity: 0.34;
+  pointer-events: none;
 }
 
 button,

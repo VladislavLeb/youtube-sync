@@ -280,6 +280,38 @@ export async function POST(request) {
             updatedAt: Date.now(),
             version: (next.version || 0) + 1,
         };
+    } else if (body.action === "appendYoutubeBatch") {
+        const incomingIds = Array.isArray(body.videoIds)
+            ? body.videoIds.filter((videoId) => /^[a-zA-Z0-9_-]{11}$/.test(videoId || "")).slice(0, 500)
+            : [];
+
+        if (incomingIds.length === 0) {
+            return json({ error: "No valid YouTube videos were provided" }, 400);
+        }
+
+        const youtubeQueue = Array.isArray(next.youtubeQueue) && next.youtubeQueue.length
+            ? next.youtubeQueue
+            : (next.videoId ? [next.videoId] : []);
+        const firstVideo = youtubeQueue.length === 0;
+        const titles = body.titles && typeof body.titles === "object" ? body.titles : {};
+        const youtubeTitles = { ...(next.youtubeTitles || {}) };
+
+        for (const videoId of incomingIds) {
+            youtubeTitles[videoId] = String(titles[videoId] || videoId).slice(0, 200);
+        }
+
+        next = {
+            ...next,
+            mediaType: MEDIA_YOUTUBE,
+            videoId: firstVideo ? incomingIds[0] : next.videoId,
+            youtubeQueue: [...youtubeQueue, ...incomingIds],
+            currentVideoIndex: firstVideo ? 0 : Number(next.currentVideoIndex || 0),
+            youtubeTitles,
+            playing: firstVideo ? false : Boolean(next.playing),
+            time: firstVideo ? 0 : normalizeTime(next.time),
+            updatedAt: Date.now(),
+            version: (next.version || 0) + 1,
+        };
     } else if (body.action === "advanceYoutube") {
         const youtubeQueue = Array.isArray(next.youtubeQueue) && next.youtubeQueue.length
             ? next.youtubeQueue

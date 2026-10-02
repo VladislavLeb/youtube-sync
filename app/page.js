@@ -50,6 +50,16 @@ function extractYouTubeId(input) {
   }
 }
 
+function extractYouTubePlaylistId(input) {
+  try {
+    const url = new URL(input.trim());
+    const playlistId = url.searchParams.get("list");
+    return /^[a-zA-Z0-9_-]{10,100}$/.test(playlistId || "") ? playlistId : null;
+  } catch {
+    return null;
+  }
+}
+
 function waitForAudioMetadata(audio) {
   if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
     return Promise.resolve();
@@ -96,6 +106,7 @@ export default function Page() {
   const [mode, setMode] = useState(MEDIA_YOUTUBE);
   const [queueUrl, setQueueUrl] = useState("");
   const [queueInputOpen, setQueueInputOpen] = useState(false);
+  const [loadingYoutubePlaylist, setLoadingYoutubePlaylist] = useState(false);
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState("Loading YouTube player...");
   const [lastState, setLastState] = useState(null);
@@ -586,6 +597,48 @@ export default function Page() {
   }, []);
 
   async function addYoutubeVideoToQueue() {
+    const playlistId = extractYouTubePlaylistId(queueUrl);
+
+    if (playlistId) {
+      setLoadingYoutubePlaylist(true);
+      setStatus("Loading YouTube playlist...");
+
+      try {
+        const response = await fetch(`/api/youtube-playlist?list=${encodeURIComponent(playlistId)}`, {
+          cache: "no-store",
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          alert(data.error || "Could not load the YouTube playlist.");
+          return;
+        }
+
+        const titles = Object.fromEntries(data.videos.map(({ videoId, title }) => [videoId, title]));
+        const nextState = await send("appendYoutubeBatch", {
+          videoIds: data.videos.map(({ videoId }) => videoId),
+          titles,
+        });
+
+        if (nextState) {
+          setQueueUrl("");
+          setQueueInputOpen(false);
+          setStatus(
+            data.truncated
+              ? `Added the first ${data.videos.length} videos from the playlist.`
+              : `Added ${data.videos.length} videos from the playlist.`
+          );
+        }
+      } catch (error) {
+        console.error(error);
+        alert("Could not load the YouTube playlist. Please try again.");
+      } finally {
+        setLoadingYoutubePlaylist(false);
+      }
+
+      return;
+    }
+
     const videoId = extractYouTubeId(queueUrl);
 
     if (!videoId) {
@@ -1124,15 +1177,21 @@ export default function Page() {
                 <div className="inputRow queueInputRow">
                   <input
                     className="queueUrlInput"
+                    disabled={loadingYoutubePlaylist}
                     onChange={(event) => setQueueUrl(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") addYoutubeVideoToQueue();
                     }}
-                    placeholder="YouTube video link"
+                    placeholder="YouTube video or playlist link"
                     value={queueUrl}
                   />
-                  <button className="queueAddButton" onClick={addYoutubeVideoToQueue} type="button">
-                    Add to queue
+                  <button
+                    className="queueAddButton"
+                    disabled={loadingYoutubePlaylist}
+                    onClick={addYoutubeVideoToQueue}
+                    type="button"
+                  >
+                    {loadingYoutubePlaylist ? "Loading..." : "Add to queue"}
                   </button>
                 </div>
               )}

@@ -94,7 +94,8 @@ function sanitizeFileName(fileName) {
 
 export default function Page() {
   const [mode, setMode] = useState(MEDIA_YOUTUBE);
-  const [url, setUrl] = useState("");
+  const [queueUrl, setQueueUrl] = useState("");
+  const [queueInputOpen, setQueueInputOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState("Loading YouTube player...");
   const [lastState, setLastState] = useState(null);
@@ -104,6 +105,7 @@ export default function Page() {
   const [liveConnected, setLiveConnected] = useState(false);
   const [liveVolume, setLiveVolume] = useState(80);
   const [uploadingMp3, setUploadingMp3] = useState(false);
+  const [autoplayUnlocked, setAutoplayUnlocked] = useState(false);
 
   const playerRef = useRef(null);
   const audioRef = useRef(null);
@@ -118,6 +120,7 @@ export default function Page() {
   const lastVersionRef = useRef(null);
   const lastSoftSyncAtRef = useRef(0);
   const lastAdvanceAudioIdRef = useRef(null);
+  const lastAdvanceYoutubeVideoIdRef = useRef(null);
   const clientIdRef = useRef(null);
   const selectedModeRef = useRef(MEDIA_YOUTUBE);
 
@@ -177,6 +180,8 @@ export default function Page() {
     }
 
     if (!state.videoId) {
+      player.stopVideo?.();
+      currentVideoIdRef.current = null;
       setStatus("No video loaded yet.");
       applyingRemoteRef.current = false;
       return;
@@ -353,6 +358,11 @@ export default function Page() {
         time: player.getCurrentTime(),
       });
     }
+
+    if (event.data === window.YT.PlayerState.ENDED) {
+      advanceYoutubeQueue();
+    }
+
   }
 
   function createYouTubePlayer() {
@@ -529,18 +539,49 @@ export default function Page() {
     };
   }, []);
 
-  async function loadVideo() {
-    const videoId = extractYouTubeId(url);
+  async function addYoutubeVideoToQueue() {
+    const videoId = extractYouTubeId(queueUrl);
 
     if (!videoId) {
-      alert("Could not recognize YouTube link.");
+      alert("Could not recognize the YouTube link.");
       return;
     }
 
-    await send("load", {
-      mediaType: MEDIA_YOUTUBE,
+    const nextState = await send("appendYoutube", { videoId });
+    if (nextState) {
+      setQueueUrl("");
+      setQueueInputOpen(false);
+    }
+  }
+
+  async function advanceYoutubeQueue() {
+    const state = lastStateRef.current;
+    const videoId = currentVideoIdRef.current;
+    const advanceKey = `${Number(state?.currentVideoIndex || 0)}:${videoId}`;
+
+    if (
+      applyingRemoteRef.current ||
+      !videoId ||
+      state?.mediaType === MEDIA_MP3 ||
+      lastAdvanceYoutubeVideoIdRef.current === advanceKey
+    ) {
+      return;
+    }
+
+    lastAdvanceYoutubeVideoIdRef.current = advanceKey;
+    await send("advanceYoutube", {
       videoId,
+      currentVideoIndex: Number(state?.currentVideoIndex || 0),
     });
+  }
+
+  async function removeYoutubeVideoFromQueue(index) {
+    await send("removeYoutube", { index });
+  }
+
+  async function playYoutubeQueueVideo(index) {
+    lastAdvanceYoutubeVideoIdRef.current = null;
+    await send("selectYoutube", { index });
   }
 
   async function loadMp3(file) {
@@ -861,6 +902,7 @@ export default function Page() {
       audio
         .play()
         .then(() => {
+          setAutoplayUnlocked(true);
           window.setTimeout(() => {
             audio.pause();
             audio.muted = false;
@@ -886,6 +928,7 @@ export default function Page() {
     const state = player.getPlayerState?.();
 
     if (state === window.YT.PlayerState.PLAYING) {
+      setAutoplayUnlocked(true);
       return;
     }
 
@@ -899,6 +942,7 @@ export default function Page() {
         player.pauseVideo();
         player.unMute();
         applyingRemoteRef.current = false;
+        setAutoplayUnlocked(true);
         setStatus("Autoplay unlocked. Now press Play for everyone.");
       }, 400);
     } catch {
@@ -931,6 +975,9 @@ export default function Page() {
 
   const visibleTime = lastState?.time ? `${Math.round(lastState.time)}s` : "0s";
   const playlist = Array.isArray(lastState?.playlist) ? lastState.playlist : [];
+  const youtubeQueue = Array.isArray(lastState?.youtubeQueue) ? lastState.youtubeQueue : [];
+  const youtubeTitles = lastState?.youtubeTitles || {};
+  const currentVideoIndex = Number(lastState?.currentVideoIndex || 0);
   const currentTrackIndex = Number(lastState?.currentTrackIndex || 0);
   const totalPlaylistBytes = playlist.reduce(
     (total, track) => total + Number(track.audioSize || 0),
@@ -943,7 +990,7 @@ export default function Page() {
 
   return (
     <main className="page">
-      <section className="card">
+      <section className="card" inert={!autoplayUnlocked}>
         <h1>Sync Player</h1>
 
         <nav className="modeMenu" aria-label="Player mode">
@@ -979,17 +1026,63 @@ export default function Page() {
               together.
             </p>
 
-            <div className="inputRow">
-              <input
-                key="youtube-url-input"
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-                placeholder="https://www.youtube.com/watch?v=..."
-              />
+            <div className="youtubeQueuePanel">
+              <div className="youtubeQueueHeader">
+                <strong>Video queue</strong>
+                <button
+                  className="secondaryButton"
+                  onClick={() => setQueueInputOpen((open) => !open)}
+                  type="button"
+                >
+                  Add video
+                </button>
+              </div>
 
-              <button onClick={loadVideo} disabled={!ready}>
-                Load
-              </button>
+              {queueInputOpen && (
+                <div className="inputRow queueInputRow">
+                  <input
+                    className="queueUrlInput"
+                    onChange={(event) => setQueueUrl(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") addYoutubeVideoToQueue();
+                    }}
+                    placeholder="YouTube video link"
+                    value={queueUrl}
+                  />
+                  <button className="queueAddButton" onClick={addYoutubeVideoToQueue} type="button">
+                    Add to queue
+                  </button>
+                </div>
+              )}
+
+              {youtubeQueue.length > 0 ? (
+                <ol className="youtubeQueueList">
+                  {youtubeQueue.map((videoId, index) => (
+                    <li className={index === currentVideoIndex ? "current" : ""} key={`${videoId}-${index}`}>
+                      <span className="youtubeQueueEntry">
+                        <span>{index === currentVideoIndex ? "Now" : `${index + 1}.`} </span>
+                        <button
+                          className="youtubeQueueSelect"
+                          onClick={() => playYoutubeQueueVideo(index)}
+                          type="button"
+                        >
+                          {youtubeTitles[videoId] || videoId}
+                        </button>
+                      </span>
+                      <button
+                        aria-label={`Remove video ${videoId} from queue`}
+                        className="removeButton youtubeRemoveButton"
+                        onClick={() => removeYoutubeVideoFromQueue(index)}
+                        type="button"
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <div className="emptyPlaylist">Add video links to play them one after another.</div>
+              )}
             </div>
           </>
         ) : mode === MEDIA_MP3 ? (
@@ -1172,6 +1265,22 @@ export default function Page() {
           </p>
         )}
       </section>
+      {!autoplayUnlocked && (
+        <div className="autoplayGate" role="dialog" aria-modal="true" aria-labelledby="autoplay-gate-title">
+          <div className="autoplayGateCard">
+            <h2 id="autoplay-gate-title">Unlock autoplay to continue</h2>
+            <p>Wait for the player to load, then click the button to enable autoplay and open the site.</p>
+            <button
+              onClick={unlockAutoplay}
+              disabled={uploadingMp3 || (mode === MEDIA_YOUTUBE && !ready)}
+              type="button"
+            >
+              Unlock autoplay
+            </button>
+            {mode === MEDIA_YOUTUBE && !ready && <small>The player is loading. The button will be available when it is ready.</small>}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

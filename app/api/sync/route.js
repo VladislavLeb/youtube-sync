@@ -13,6 +13,9 @@ const MEDIA_MP3 = "mp3";
 const emptyState = {
     mediaType: MEDIA_YOUTUBE,
     videoId: null,
+    youtubeQueue: [],
+    currentVideoIndex: 0,
+    youtubeTitles: {},
     audioId: null,
     audioName: null,
     audioSize: 0,
@@ -35,6 +38,25 @@ function normalizeTime(value) {
     return n;
 }
 
+async function fetchYoutubeTitle(videoId) {
+    try {
+        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        const response = await fetch(
+            `https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`,
+            { signal: AbortSignal.timeout(4000) }
+        );
+
+        if (!response.ok) {
+            return null;
+        }
+
+        const data = await response.json();
+        return typeof data.title === "string" ? data.title.trim().slice(0, 200) || null : null;
+    } catch {
+        return null;
+    }
+}
+
 function getCurrentSnapshot(state) {
     if (!state) {
         return emptyState;
@@ -48,6 +70,22 @@ function getCurrentSnapshot(state) {
 
     if (normalizedState.mediaType === MEDIA_MP3) {
         normalizedState = normalizePlaylistState(normalizedState);
+    } else {
+        const youtubeQueue = Array.isArray(normalizedState.youtubeQueue) && normalizedState.youtubeQueue.length
+            ? normalizedState.youtubeQueue.filter((videoId) => /^[a-zA-Z0-9_-]{11}$/.test(videoId || ""))
+            : (normalizedState.videoId ? [normalizedState.videoId] : []);
+        const requestedIndex = Number(normalizedState.currentVideoIndex || 0);
+        const currentIndex = youtubeQueue[requestedIndex] === normalizedState.videoId
+            ? requestedIndex
+            : youtubeQueue.indexOf(normalizedState.videoId);
+        normalizedState = {
+            ...normalizedState,
+            youtubeQueue,
+            currentVideoIndex: currentIndex >= 0 ? currentIndex : 0,
+            youtubeTitles: normalizedState.youtubeTitles && typeof normalizedState.youtubeTitles === "object"
+                ? normalizedState.youtubeTitles
+                : {},
+        };
     }
 
     if (!normalizedState.playing) {
@@ -153,6 +191,9 @@ function stateWithTrack(state, playlist, currentTrackIndex, overrides = {}) {
         ...state,
         mediaType: MEDIA_MP3,
         videoId: null,
+        youtubeQueue: [],
+        currentVideoIndex: 0,
+        youtubeTitles: {},
         audioId: track?.audioId || null,
         audioName: track?.audioName || null,
         audioSize: track?.audioSize || 0,
@@ -197,6 +238,9 @@ export async function POST(request) {
         next = {
             mediaType: MEDIA_YOUTUBE,
             videoId: body.videoId,
+            youtubeQueue: [body.videoId],
+            currentVideoIndex: 0,
+            youtubeTitles: { [body.videoId]: await fetchYoutubeTitle(body.videoId) || body.videoId },
             audioId: null,
             audioName: null,
             audioSize: 0,
@@ -208,6 +252,142 @@ export async function POST(request) {
             updatedAt: Date.now(),
             version: (prev?.version || 0) + 1,
         };
+    } else if (body.action === "appendYoutube") {
+        if (!/^[a-zA-Z0-9_-]{11}$/.test(body.videoId || "")) {
+            return json({ error: "Invalid YouTube video ID" }, 400);
+        }
+
+        const youtubeQueue = Array.isArray(next.youtubeQueue) && next.youtubeQueue.length
+            ? next.youtubeQueue
+            : (next.videoId ? [next.videoId] : []);
+        const title = await fetchYoutubeTitle(body.videoId);
+        const firstVideo = youtubeQueue.length === 0;
+        const updatedQueue = [...youtubeQueue, body.videoId];
+        const currentVideoIndex = firstVideo ? 0 : Number(next.currentVideoIndex || 0);
+
+        next = {
+            ...next,
+            mediaType: MEDIA_YOUTUBE,
+            videoId: firstVideo ? body.videoId : next.videoId,
+            youtubeQueue: updatedQueue,
+            currentVideoIndex,
+            youtubeTitles: {
+                ...(next.youtubeTitles || {}),
+                [body.videoId]: title || body.videoId,
+            },
+            playing: firstVideo ? false : Boolean(next.playing),
+            time: firstVideo ? 0 : normalizeTime(next.time),
+            updatedAt: Date.now(),
+            version: (next.version || 0) + 1,
+        };
+    } else if (body.action === "advanceYoutube") {
+        const youtubeQueue = Array.isArray(next.youtubeQueue) && next.youtubeQueue.length
+            ? next.youtubeQueue
+            : (next.videoId ? [next.videoId] : []);
+        const currentVideoIndex = Number(next.currentVideoIndex || 0);
+        const expectedIndex = Number(body.currentVideoIndex);
+        const expectedVideoId = String(body.videoId || "");
+
+        if (next.mediaType !== MEDIA_YOUTUBE || !next.videoId || youtubeQueue.length === 0) {
+            return json({ error: "No YouTube queue loaded" }, 400);
+        }
+
+        if (!next.playing) {
+            return json(next);
+        }
+
+        if (expectedVideoId !== next.videoId || expectedIndex !== currentVideoIndex) {
+            return json(next);
+        }
+
+        if (currentVideoIndex + 1 >= youtubeQueue.length) {
+            next = {
+                ...next,
+                playing: false,
+                time: 0,
+                updatedAt: Date.now(),
+                version: (next.version || 0) + 1,
+            };
+        } else {
+            const nextIndex = currentVideoIndex + 1;
+            next = {
+                ...next,
+                videoId: youtubeQueue[nextIndex],
+                currentVideoIndex: nextIndex,
+                playing: true,
+                time: 0,
+                updatedAt: Date.now(),
+                version: (next.version || 0) + 1,
+            };
+        }
+    } else if (body.action === "selectYoutube") {
+        const youtubeQueue = Array.isArray(next.youtubeQueue) && next.youtubeQueue.length
+            ? next.youtubeQueue
+            : (next.videoId ? [next.videoId] : []);
+        const index = Number(body.index);
+
+        if (!Number.isInteger(index) || index < 0 || index >= youtubeQueue.length) {
+            return json({ error: "Invalid YouTube queue index" }, 400);
+        }
+
+        next = {
+            ...next,
+            mediaType: MEDIA_YOUTUBE,
+            videoId: youtubeQueue[index],
+            youtubeQueue,
+            currentVideoIndex: index,
+            playing: true,
+            time: 0,
+            updatedAt: Date.now(),
+            version: (next.version || 0) + 1,
+        };
+    } else if (body.action === "removeYoutube") {
+        const youtubeQueue = Array.isArray(next.youtubeQueue) && next.youtubeQueue.length
+            ? [...next.youtubeQueue]
+            : (next.videoId ? [next.videoId] : []);
+        const index = Number(body.index);
+
+        if (!Number.isInteger(index) || index < 0 || index >= youtubeQueue.length) {
+            return json({ error: "Invalid YouTube queue index" }, 400);
+        }
+
+        const currentIndex = Number(next.currentVideoIndex || 0);
+        const removingCurrent = index === currentIndex;
+        youtubeQueue.splice(index, 1);
+
+        if (youtubeQueue.length === 0) {
+            next = {
+                ...next,
+                videoId: null,
+                youtubeQueue: [],
+                currentVideoIndex: 0,
+                playing: false,
+                time: 0,
+                updatedAt: Date.now(),
+                version: (next.version || 0) + 1,
+            };
+        } else if (removingCurrent) {
+            const nextIndex = Math.min(index, youtubeQueue.length - 1);
+            next = {
+                ...next,
+                videoId: youtubeQueue[nextIndex],
+                youtubeQueue,
+                currentVideoIndex: nextIndex,
+                playing: Boolean(next.playing),
+                time: 0,
+                updatedAt: Date.now(),
+                version: (next.version || 0) + 1,
+            };
+        } else {
+            next = {
+                ...next,
+                youtubeQueue,
+                currentVideoIndex: currentIndex > index ? currentIndex - 1 : currentIndex,
+                updatedAt: Date.now(),
+                version: (next.version || 0) + 1,
+            };
+        }
+
     } else if (body.action === "load" && normalizeMediaType(body.mediaType) === MEDIA_MP3) {
         const track = makeTrackFromBody(body);
 

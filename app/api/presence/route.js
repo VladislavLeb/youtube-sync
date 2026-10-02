@@ -50,13 +50,16 @@ export async function POST(request) {
     if (body.action === "leave") {
         await redis.del(clientKey);
         const cleared = await clearMp3BlobsIfRoomIsEmpty(redis, ROOM_KEY);
+        const prev = await redis.get(ROOM_KEY);
 
-        if (cleared) {
-            const prev = await redis.get(ROOM_KEY);
-
+        // Keep the shared YouTube queue across disconnects and page refreshes.
+        if (cleared && prev?.mediaType === "mp3") {
             await redis.set(ROOM_KEY, {
                 mediaType: "youtube",
                 videoId: null,
+                youtubeQueue: [],
+                currentVideoIndex: 0,
+                youtubeTitles: {},
                 audioId: null,
                 audioName: null,
                 audioSize: 0,

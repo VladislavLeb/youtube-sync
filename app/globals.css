@@ -117,6 +117,67 @@ input:focus {
   will-change: transform;
 }
 
+.leafFall .burstLeaf {
+  top: var(--burst-top);
+  left: var(--burst-left);
+  width: var(--burst-size);
+  height: var(--burst-size);
+  animation: leafBurst var(--burst-duration) ease-in var(--burst-delay) both;
+}
+
+.treeButton {
+  position: fixed;
+  z-index: 4;
+  bottom: 14px;
+  width: min(16vw, 230px, calc((100vw - 980px) / 2 - 18px));
+  aspect-ratio: 3 / 4;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.treeButton:hover {
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.treeButton:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.treeButtonLeft {
+  left: 8px;
+}
+
+.treeButtonRight {
+  right: 8px;
+}
+
+.treeImage {
+  position: absolute;
+  inset: 0;
+  background-image: url("/images/autumn-tree-sprite.png");
+  background-repeat: no-repeat;
+  background-size: 200% 100%;
+  transform-origin: 50% 88%;
+}
+
+.treeImageLeft {
+  background-position: 0% 50%;
+}
+
+.treeImageRight {
+  background-position: 100% 50%;
+}
+
+.treeButton.shaking .treeImage {
+  animation: treeShake 550ms ease-in-out;
+}
+
 @keyframes fallingLeaf {
   from {
     transform: translate3d(0, -8vh, 0) rotate(0deg);
@@ -124,6 +185,33 @@ input:focus {
 
   to {
     transform: translate3d(var(--leaf-drift), 112vh, 0) rotate(720deg);
+  }
+}
+
+@keyframes leafBurst {
+  from {
+    opacity: 0.95;
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(var(--burst-drift), 42vh, 0) rotate(620deg);
+  }
+}
+
+@keyframes treeShake {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  25% {
+    transform: rotate(-5deg);
+  }
+
+  75% {
+    transform: rotate(5deg);
   }
 }
 
@@ -179,6 +267,16 @@ input:focus {
 
 @media (prefers-reduced-motion: reduce) {
   .leafFall {
+    display: none;
+  }
+
+  .treeButton.shaking .treeImage {
+    animation: none;
+  }
+}
+
+@media (max-width: 1239px) {
+  .treeButton {
     display: none;
   }
 }

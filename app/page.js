@@ -106,6 +106,8 @@ export default function Page() {
   const [liveVolume, setLiveVolume] = useState(80);
   const [uploadingMp3, setUploadingMp3] = useState(false);
   const [autoplayUnlocked, setAutoplayUnlocked] = useState(false);
+  const [treeBursts, setTreeBursts] = useState([]);
+  const [treeShake, setTreeShake] = useState({ side: null, id: 0 });
 
   const playerRef = useRef(null);
   const audioRef = useRef(null);
@@ -121,12 +123,56 @@ export default function Page() {
   const lastSoftSyncAtRef = useRef(0);
   const lastAdvanceAudioIdRef = useRef(null);
   const lastAdvanceYoutubeVideoIdRef = useRef(null);
+  const treeBurstIdRef = useRef(0);
   const clientIdRef = useRef(null);
   const selectedModeRef = useRef(MEDIA_YOUTUBE);
 
   function rememberState(state) {
     lastStateRef.current = state;
     setLastState(state);
+  }
+
+  function shakeTree(side) {
+    const batchId = ++treeBurstIdRef.current;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const treeWidth = Math.min(
+      viewportWidth * 0.16,
+      230,
+      (viewportWidth - 980) / 2 - 18
+    );
+    const treeHeight = treeWidth * (4 / 3);
+    const leaves = Array.from({ length: 14 }, (_, index) => {
+      const fromLeftTree = side === "left";
+      const horizontalDrift = 8 + Math.random() * 20;
+      const treeCenterX = fromLeftTree
+        ? 8 + treeWidth / 2
+        : viewportWidth - 8 - treeWidth / 2;
+      const horizontalJitter = (Math.random() - 0.5) * treeWidth * 0.6;
+      const treeTop = viewportHeight - 14 - treeHeight;
+      const canopyOffset = 0.16 + Math.random() * 0.42;
+      const burstTop = ((treeTop + treeHeight * canopyOffset) / viewportHeight) * 100;
+
+      return {
+        id: `${batchId}-${index}`,
+        batchId,
+        style: {
+          "--burst-left": `${((treeCenterX + horizontalJitter) / viewportWidth) * 100}%`,
+          "--burst-top": `${burstTop}%`,
+          "--burst-size": `${20 + Math.random() * 16}px`,
+          "--burst-duration": `${2.4 + Math.random() * 1.3}s`,
+          "--burst-delay": `${Math.random() * 0.45}s`,
+          "--burst-drift": `${(fromLeftTree ? 1 : -1) * horizontalDrift}vw`,
+          backgroundPosition: ["0% 0%", "100% 0%", "0% 100%", "100% 100%"][index % 4],
+        },
+      };
+    });
+
+    setTreeShake({ side, id: batchId });
+    setTreeBursts((current) => [...current.slice(-28), ...leaves]);
+    window.setTimeout(() => {
+      setTreeBursts((current) => current.filter((leaf) => leaf.batchId !== batchId));
+    }, 5000);
   }
 
   function shouldIgnoreIncomingState(state) {
@@ -991,6 +1037,9 @@ export default function Page() {
   return (
     <main className="page">
       <div className="leafFall" aria-hidden="true">
+        {treeBursts.map((leaf) => (
+          <span className="burstLeaf" key={leaf.id} style={leaf.style} />
+        ))}
         {Array.from({ length: 14 }, (_, index) => (
           <span
             key={index}
@@ -1005,6 +1054,24 @@ export default function Page() {
           />
         ))}
       </div>
+      <button
+        aria-label="Shake the golden autumn tree"
+        className={`treeButton treeButtonLeft ${treeShake.side === "left" ? "shaking" : ""}`}
+        key={`left-tree-${treeShake.side === "left" ? treeShake.id : 0}`}
+        onClick={() => shakeTree("left")}
+        type="button"
+      >
+        <span aria-hidden="true" className="treeImage treeImageLeft" />
+      </button>
+      <button
+        aria-label="Shake the red autumn tree"
+        className={`treeButton treeButtonRight ${treeShake.side === "right" ? "shaking" : ""}`}
+        key={`right-tree-${treeShake.side === "right" ? treeShake.id : 0}`}
+        onClick={() => shakeTree("right")}
+        type="button"
+      >
+        <span aria-hidden="true" className="treeImage treeImageRight" />
+      </button>
       <section className="card" inert={!autoplayUnlocked}>
         <h1>Sync Player</h1>
 

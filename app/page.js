@@ -990,6 +990,21 @@ export default function Page() {
 
   return (
     <main className="page">
+      <div className="leafFall" aria-hidden="true">
+        {Array.from({ length: 14 }, (_, index) => (
+          <span
+            key={index}
+            style={{
+              "--leaf-left": `${(index * 37 + 8) % 100}%`,
+              "--leaf-delay": `${-index * 1.9}s`,
+              "--leaf-duration": `${13 + (index % 6) * 2}s`,
+              "--leaf-drift": `${(index % 2 === 0 ? 1 : -1) * (12 + (index % 5) * 5)}vw`,
+              "--leaf-size": `${30 + (index % 4) * 8}px`,
+              backgroundPosition: ["0% 0%", "100% 0%", "0% 100%", "100% 100%"][index % 4],
+            }}
+          />
+        ))}
+      </div>
       <section className="card" inert={!autoplayUnlocked}>
         <h1>Sync Player</h1>
 

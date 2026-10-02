@@ -95,6 +95,38 @@ input:focus {
   justify-content: center;
 }
 
+.leafFall {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.leafFall span {
+  position: absolute;
+  top: -48px;
+  left: var(--leaf-left);
+  width: var(--leaf-size);
+  height: var(--leaf-size);
+  background-image: url("/images/autumn-leaf-sprite.png");
+  background-repeat: no-repeat;
+  background-size: 200% 200%;
+  opacity: 0.78;
+  animation: fallingLeaf var(--leaf-duration) linear var(--leaf-delay) infinite;
+  will-change: transform;
+}
+
+@keyframes fallingLeaf {
+  from {
+    transform: translate3d(0, -8vh, 0) rotate(0deg);
+  }
+
+  to {
+    transform: translate3d(var(--leaf-drift), 112vh, 0) rotate(720deg);
+  }
+}
+
 .autoplayGate {
   position: fixed;
   inset: 0;
@@ -133,6 +165,8 @@ input:focus {
 }
 
 .card {
+  position: relative;
+  z-index: 2;
   width: 100%;
   max-width: 980px;
   padding: 28px;
@@ -141,6 +175,12 @@ input:focus {
   background: rgba(255, 255, 255, 0.88);
   box-shadow: var(--shadow);
   backdrop-filter: blur(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leafFall {
+    display: none;
+  }
 }
 
 h1 {

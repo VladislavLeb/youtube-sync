@@ -678,6 +678,10 @@ export default function Page() {
     await send("removeYoutube", { index });
   }
 
+  async function clearYoutubeQueue() {
+    await send("clearYoutubeQueue");
+  }
+
   async function playYoutubeQueueVideo(index) {
     lastAdvanceYoutubeVideoIdRef.current = null;
     await send("selectYoutube", { index });
@@ -766,6 +770,10 @@ export default function Page() {
     await send("removeTrack", {
       index,
     });
+  }
+
+  async function clearPlaylist() {
+    await send("clearPlaylist");
   }
 
   function attachLiveAudioTrack(track) {
@@ -1164,13 +1172,23 @@ export default function Page() {
             <div className="youtubeQueuePanel">
               <div className="youtubeQueueHeader">
                 <strong>Video queue</strong>
-                <button
-                  className="secondaryButton"
-                  onClick={() => setQueueInputOpen((open) => !open)}
-                  type="button"
-                >
-                  Add video
-                </button>
+                <div className="youtubeQueueActions">
+                  <button
+                    className="clearQueueButton"
+                    disabled={youtubeQueue.length === 0}
+                    onClick={clearYoutubeQueue}
+                    type="button"
+                  >
+                    Clear queue
+                  </button>
+                  <button
+                    className="secondaryButton"
+                    onClick={() => setQueueInputOpen((open) => !open)}
+                    type="button"
+                  >
+                    Add video
+                  </button>
+                </div>
               </div>
 
               {queueInputOpen && (
@@ -1246,9 +1264,19 @@ export default function Page() {
             <div className="playlistPanel">
               <div className="playlistHeader">
                 <strong>Playlist</strong>
-                <span>
-                  {formatBytes(totalPlaylistBytes)} / {formatBytes(MAX_TOTAL_MP3_BYTES)}
-                </span>
+                <div className="playlistHeaderActions">
+                  <span>
+                    {formatBytes(totalPlaylistBytes)} / {formatBytes(MAX_TOTAL_MP3_BYTES)}
+                  </span>
+                  <button
+                    className="clearPlaylistButton"
+                    disabled={uploadingMp3 || playlist.length === 0}
+                    onClick={clearPlaylist}
+                    type="button"
+                  >
+                    Clear playlist
+                  </button>
+                </div>
               </div>
 
               {playlist.length > 0 ? (

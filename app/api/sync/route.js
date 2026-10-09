@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { deleteMp3Blob } from "../mp3-store";
+import { deleteMp3Blob, deletePlaylistBlobs } from "../mp3-store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -312,6 +312,22 @@ export async function POST(request) {
             updatedAt: Date.now(),
             version: (next.version || 0) + 1,
         };
+    } else if (body.action === "clearYoutubeQueue") {
+        if (next.mediaType !== MEDIA_YOUTUBE) {
+            return json({ error: "The YouTube queue is not active" }, 409);
+        }
+
+        next = {
+            ...next,
+            videoId: null,
+            youtubeQueue: [],
+            currentVideoIndex: 0,
+            youtubeTitles: {},
+            playing: false,
+            time: 0,
+            updatedAt: Date.now(),
+            version: (next.version || 0) + 1,
+        };
     } else if (body.action === "advanceYoutube") {
         const youtubeQueue = Array.isArray(next.youtubeQueue) && next.youtubeQueue.length
             ? next.youtubeQueue
@@ -538,6 +554,30 @@ export async function POST(request) {
             updatedAt: Date.now(),
             version: (next.version || 0) + 1,
         });
+    } else if (body.action === "clearPlaylist") {
+        const version = (next.version || 0) + 1;
+        await deletePlaylistBlobs(next);
+
+        if (next.mediaType === MEDIA_MP3) {
+            next = stateWithTrack(next, [], 0, {
+                playing: false,
+                time: 0,
+                updatedAt: Date.now(),
+                version,
+            });
+        } else {
+            next = {
+                ...next,
+                audioId: null,
+                audioName: null,
+                audioSize: 0,
+                audioUrl: null,
+                playlist: [],
+                currentTrackIndex: 0,
+                updatedAt: Date.now(),
+                version,
+            };
+        }
     } else if (body.action === "play") {
         if (!hasLoadedMedia(next)) {
             return json({ error: "No media loaded" }, 400);

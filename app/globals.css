@@ -361,6 +361,14 @@ h1 {
   gap: 12px;
 }
 
+.youtubeQueueActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .secondaryButton {
   padding: 8px 12px;
   background: var(--surface);
@@ -530,13 +538,39 @@ h1 {
 
 .playlistHeader {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   color: var(--text);
 }
 
-.playlistHeader span {
+.playlistHeaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.playlistHeaderActions span {
   color: var(--text-muted);
+}
+
+.clearPlaylistButton,
+.clearQueueButton {
+  padding: 5px 9px;
+  border-color: #ffd1d1;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: 12px;
+  box-shadow: none;
+}
+
+.clearPlaylistButton:hover,
+.clearQueueButton:hover {
+  background: #ffe4e4;
+  color: #8f1d16;
+  transform: none;
 }
 
 .playlist {
